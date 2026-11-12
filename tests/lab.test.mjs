@@ -143,6 +143,78 @@ test("Offline live calls are blocked even with a configured API key", async (t) 
     /disabled/,
   );
 });
+test("Standalone paid tests unlock without Supabase, require access key and survive another Vercel instance", async (t) => {
+  const env = {
+    OPENAI_API_KEY: "never-expose",
+    LIVE_API_ENABLED: "true",
+    LAB_ACCESS_TOKEN: "test-access-key-at-least-32-characters",
+  };
+  const { config, store } = await fixture(t, { env });
+  let calls = 0;
+  const generator = async (b) => {
+    calls++;
+    return {
+      document: sampleResult(b.organization, b.stage),
+      usage: { input_tokens: 100, output_tokens: 200 },
+      searchCalls: 0,
+      cost: { usd: 0.001 },
+      model: b.model,
+    };
+  };
+  const lab = createLab({ config, store, generator });
+  assert.equal(lab.status().liveEnabled, true);
+  assert.equal(lab.status().accessKeyRequired, true);
+  assert.equal(
+    JSON.stringify(lab.status()).includes(env.LAB_ACCESS_TOKEN),
+    false,
+  );
+  await assert.rejects(
+    lab.act("start", body({ mode: "live" }), "demo-a"),
+    (e) => e.status === 401,
+  );
+  const started = await lab.act(
+    "start",
+    body({ mode: "live" }),
+    env.LAB_ACCESS_TOKEN,
+  );
+  assert.ok(started.jobToken);
+  // A separate storage path simulates a fresh serverless instance with no previous state.
+  const second = await fixture(t, { env });
+  const other = createLab({
+    config: second.config,
+    store: second.store,
+    generator,
+  });
+  const result = await other.act(
+    "step",
+    { jobId: started.job.id, stageIndex: 0, jobToken: started.jobToken },
+    env.LAB_ACCESS_TOKEN,
+  );
+  assert.equal(result.job.steps[0].status, "complete");
+  assert.equal(calls, 1);
+  const replay = await other.act(
+    "step",
+    { jobId: started.job.id, stageIndex: 0, jobToken: started.jobToken },
+    env.LAB_ACCESS_TOKEN,
+  );
+  assert.equal(replay.replayed, true);
+  assert.equal(calls, 1);
+  const third = await fixture(t, { env }),
+    fresh = createLab({ config: third.config, store: third.store, generator });
+  await assert.rejects(
+    fresh.act(
+      "step",
+      {
+        jobId: started.job.id,
+        stageIndex: 0,
+        jobToken: started.jobToken + "x",
+      },
+      env.LAB_ACCESS_TOKEN,
+    ),
+    (e) => e.status === 403,
+  );
+  assert.equal(calls, 1);
+});
 test("Full staged enrichment, shared read, meeting prep, cache reuse and refresh versions", async (t) => {
   const { lab, config } = await fixture(t);
   const first = await complete(lab, body());

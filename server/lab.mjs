@@ -1,4 +1,9 @@
-import { randomUUID, createHash } from "node:crypto";
+import {
+  randomUUID,
+  createHash,
+  createHmac,
+  timingSafeEqual,
+} from "node:crypto";
 import {
   operations,
   recipes,
@@ -37,6 +42,7 @@ export function configuration(env = process.env) {
       env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "",
     workspaceId: env.LAB_WORKSPACE_ID || "",
     openaiKey: env.OPENAI_API_KEY || "",
+    localAccessToken: env.LAB_ACCESS_TOKEN || "",
     enabled: env.LIVE_API_ENABLED === "true",
     allowedUsers: (env.LAB_ALLOWED_USER_IDS || "")
       .split(",")
@@ -127,15 +133,63 @@ export function createLab({
     config.supabaseSecret &&
     uuid.test(config.workspaceId)
   );
+  const standalone = store.kind !== "supabase";
+  const standaloneReady = (config.localAccessToken || "").length >= 24;
   const live =
-    store.kind === "supabase" && ready && config.enabled && !!config.openaiKey;
+    (standalone ? standaloneReady : ready) &&
+    config.enabled &&
+    !!config.openaiKey;
+  const seal = (job) => {
+    if (!standaloneReady || !standalone) return {};
+    const data = Buffer.from(
+      JSON.stringify({ expires: Date.now() + 86400000, job }),
+    ).toString("base64url");
+    return {
+      jobToken:
+        data +
+        "." +
+        createHmac("sha256", config.openaiKey || config.localAccessToken)
+          .update("research-job-v1:")
+          .update(data)
+          .digest("base64url"),
+    };
+  };
+  const unseal = (token) => {
+    if (!standaloneReady || typeof token !== "string" || token.length > 2000000)
+      throw fail("Missing or oversized temporary workflow receipt.", 400);
+    const [data, signature, extra] = token.split(".");
+    const expected = createHmac(
+      "sha256",
+      config.openaiKey || config.localAccessToken,
+    )
+      .update("research-job-v1:")
+      .update(data || "")
+      .digest();
+    const supplied = Buffer.from(signature || "", "base64url");
+    if (
+      extra ||
+      supplied.length !== expected.length ||
+      !timingSafeEqual(supplied, expected)
+    )
+      throw fail("Invalid temporary workflow receipt.", 403);
+    let parsed;
+    try {
+      parsed = JSON.parse(Buffer.from(data, "base64url"));
+    } catch {
+      throw fail("Invalid temporary workflow receipt.");
+    }
+    if (!parsed.expires || parsed.expires < Date.now() || !parsed.job)
+      throw fail("Temporary workflow receipt expired.");
+    return parsed.job;
+  };
   return {
     status() {
       return {
-        version: "0.2.0",
+        version: "0.2.1",
         backend: store.kind,
         ready: store.kind !== "supabase" || ready,
         liveEnabled: live,
+        accessKeyRequired: standalone && !!config.localAccessToken,
         signInUrl: config.supabaseUrl,
         publishableKey: config.supabasePublishable,
         workspaceId: config.workspaceId,
@@ -158,8 +212,14 @@ export function createLab({
           store.kind === "supabase"
             ? "Shared Supabase test workspace. Only verified members can read; editors can run and add notes."
             : store.kind === "local-file"
-              ? "Local file simulator. Data survives this server restarting, but this is not hosted cloud storage. Paid calls are blocked."
-              : "Local ephemeral simulator on Vercel. This is not durable cloud storage. Configure Supabase for persistence. Paid calls are blocked.",
+              ? "Local test storage, not hosted cloud storage. " +
+                (live
+                  ? "Live API tests are enabled with the lab access key."
+                  : "Paid calls require OPENAI_API_KEY, LIVE_API_ENABLED=true and a LAB_ACCESS_TOKEN of at least 24 characters.")
+              : "Temporary Vercel test storage. Results/history may disappear between instances or deployments. " +
+                (live
+                  ? "Live API tests are enabled with the lab access key; cloud sharing still requires Supabase."
+                  : "Paid calls require OPENAI_API_KEY, LIVE_API_ENABLED=true and a LAB_ACCESS_TOKEN of at least 24 characters."),
       };
     },
     async act(action, body = {}, token) {
@@ -264,10 +324,10 @@ export function createLab({
         validateRequest(body);
         if (body.mode === "live" && !live)
           throw fail(
-            "Live calls are disabled. Configure Supabase membership, server API key and LIVE_API_ENABLED.",
+            "Live calls are disabled. Set OPENAI_API_KEY and LIVE_API_ENABLED=true. Without Supabase, also set LAB_ACCESS_TOKEN to at least 24 characters.",
             403,
           );
-        return store.transact(user, (state) => {
+        const started = await store.transact(user, (state) => {
           const previous = state.jobs.find((j) => j.id === body.requestId);
           if (previous) {
             if (previous.createdBy !== user.id)
@@ -351,11 +411,35 @@ export function createLab({
           state.jobs.push(job);
           return { job };
         });
+        return { ...started, ...seal(started.job) };
       }
       if (action !== "step") throw fail("Unknown action.", 404);
       if (!uuid.test(body.jobId || "") || !Number.isInteger(body.stageIndex))
         throw fail("Workflow ID and stage index required.");
       const claim = await store.transact(user, (state) => {
+        if (
+          standalone &&
+          !state.jobs.some((j) => j.id === body.jobId) &&
+          body.jobToken
+        ) {
+          const restored = unseal(body.jobToken);
+          if (restored.id !== body.jobId || restored.createdBy !== user.id)
+            throw fail("Workflow receipt does not match this request.", 403);
+          state.jobs.push(restored);
+          if (
+            restored.organizationId &&
+            !state.organizations.some((o) => o.id === restored.organizationId)
+          )
+            state.organizations.push({
+              id: restored.organizationId,
+              key: orgKey(restored.input),
+              name: restored.input.organization,
+              domain: restored.input.domain,
+              entityScope: restored.input.entityScope,
+              createdAt: now(),
+              versions: [],
+            });
+        }
         const job = findJob(state, body.jobId);
         if (job.createdBy !== user.id)
           throw fail(
@@ -401,7 +485,7 @@ export function createLab({
         job.total = totals(job.steps);
         return { job: structuredClone(job), stage: structuredClone(stage) };
       });
-      if (claim.replayed) return claim;
+      if (claim.replayed) return { ...claim, ...seal(claim.job) };
       const { job, stage } = claim;
       const started = Date.now();
       let patch;
@@ -446,7 +530,7 @@ export function createLab({
         };
       }
       try {
-        return await store.transact(user, (state) => {
+        const finished = await store.transact(user, (state) => {
           const current = findJob(state, job.id),
             target = current.steps[stage.index];
           if (target.claim !== stage.claim || target.status !== "running")
@@ -483,6 +567,7 @@ export function createLab({
           }
           return { job: current };
         });
+        return { ...finished, ...seal(finished.job) };
       } catch {
         return {
           jobId: job.id,

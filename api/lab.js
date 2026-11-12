@@ -30,10 +30,10 @@ export async function handleRequest(req, res, instance = lab) {
       if (req.body === undefined)
         for await (const chunk of req) {
           raw += chunk;
-          if (Buffer.byteLength(raw) > 64000)
+          if (Buffer.byteLength(raw) > 2500000)
             return send(413, { error: "Request too large." });
         }
-      if (Buffer.byteLength(raw) > 64000)
+      if (Buffer.byteLength(raw) > 2500000)
         return send(413, { error: "Request too large." });
       try {
         body = JSON.parse(raw);

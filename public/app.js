@@ -1,4 +1,5 @@
 const $ = (id) => document.getElementById(id);
+const jobTokens = new Map();
 const loadingControls = [
   ...document.querySelectorAll("button,input,select,textarea"),
 ].map((control) => [control, control.disabled]);
@@ -25,6 +26,8 @@ let config,
   pause = false,
   refreshSequence = 0;
 async function api(action, body) {
+  if (action === "step" && body && jobTokens.has(body.jobId))
+    body = { ...body, jobToken: jobTokens.get(body.jobId) };
   const response = await fetch("/api/lab?action=" + action, {
     method: body ? "POST" : "GET",
     headers: {
@@ -35,6 +38,7 @@ async function api(action, body) {
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || "Request failed.");
+  if (data.job?.id && data.jobToken) jobTokens.set(data.job.id, data.jobToken);
   return data;
 }
 function message(text, error = false) {
@@ -379,6 +383,20 @@ $("auth-form").onsubmit = async (event) => {
     message(e.message, true);
   }
 };
+$("access-form").onsubmit = async (event) => {
+  event.preventDefault();
+  token = $("access-key").value;
+  $("access-key").value = "";
+  try {
+    await refresh();
+    message(
+      "API test environment unlocked. Results are temporary without Supabase.",
+    );
+  } catch (error) {
+    token = "";
+    message(error.message, true);
+  }
+};
 $("signout").onclick = async () => {
   if (token)
     await fetch(config.signInUrl + "/auth/v1/logout", {
@@ -422,13 +440,19 @@ try {
     )
     .join("");
   $("mode").querySelector('[value="live"]').disabled = !config.liveEnabled;
-  $("demo-auth").hidden = config.backend === "supabase";
+  $("demo-auth").hidden =
+    config.backend === "supabase" || config.accessKeyRequired;
+  $("access-form").hidden = !config.accessKeyRequired;
   $("auth-form").hidden = config.backend !== "supabase";
-  if (config.backend !== "supabase") token = "demo-a";
+  if (config.backend !== "supabase" && !config.accessKeyRequired)
+    token = "demo-a";
   $("pricing").textContent =
     `USD estimate · pricing checked ${config.pricing.checkedOn} · ${config.pricing.tier}. Hourly live-call limit: ${config.hourlyLiveCalls} per member. Review rates before live benchmarking.`;
   plan();
-  await refresh();
+  if (config.accessKeyRequired)
+    $("account-state").textContent =
+      "Enter the lab access key above. Supabase is not required for API tests.";
+  else await refresh();
 } catch (e) {
   message(e.message, true);
 } finally {

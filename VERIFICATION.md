@@ -1,8 +1,8 @@
-# Verification — v2
+# Verification — v2.1
 
 ## Verified locally
 
-- 17 automated tests passed; syntax/build check passed.
+- 18 automated tests passed; syntax/build check passed.
 - Browser check completed a seven-stage synthetic profile and a two-stage meeting brief, retained the profile after server restart, showed A's saved note to B, and denied the outsider.
 
 - Basic, comprehensive Hybrid and comprehensive Sol plans have distinct scopes and routing.
@@ -14,6 +14,8 @@
 - Cached token and reasoning accounting, unknown charges and cache-write ranges.
 - Both SQL migrations executed in PGlite. Shared migration checks two-member/viewer reads, outsider/anonymous denial, client write/RPC denial, server membership validation and stale-revision rejection.
 - Vercel pre-parsed JSON body handling, HTTP method restrictions and syntax/build checks.
+
+- Standalone API mode enables without Supabase only when an API key, enabled switch and a long lab access key are configured. Missing/wrong access keys are rejected; signed workflow progress resumes on a fresh simulated server instance.
 
 ## Requires your credentials / deployment
 

@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile, rename } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash, timingSafeEqual } from "node:crypto";
 export const demoUser = "11111111-1111-4111-8111-111111111111";
 export const secondUser = "22222222-2222-4222-8222-222222222222";
 export const emptyState = () => ({ organizations: [], jobs: [], notes: [] });
@@ -26,6 +26,18 @@ export function createStore(config, fetcher = fetch) {
     return {
       kind: process.env.VERCEL ? "local-ephemeral" : "local-file",
       async authenticate(token) {
+        if (config.localAccessToken) {
+          const hash = (value) =>
+            createHash("sha256")
+              .update(String(value || ""))
+              .digest();
+          if (!timingSafeEqual(hash(token), hash(config.localAccessToken)))
+            throw fail(
+              "Enter the lab access key to unlock this test environment.",
+              401,
+            );
+          return { id: demoUser, role: "editor" };
+        }
         if (!["demo-a", "demo-b"].includes(token))
           throw fail(
             token === "demo-outsider"

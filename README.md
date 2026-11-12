@@ -1,6 +1,10 @@
-# Research API Lab v2
+# Research API Lab v2.1
 
 A small standalone backend benchmark: public organization enrichment, meeting preparation, usage receipts and shared Supabase records. No existing application's interface, private methodology, proprietary dataset or production implementation is included.
+
+## API tests without Supabase
+
+See `VERCEL_SETUP.md`. Set `OPENAI_API_KEY`, `LIVE_API_ENABLED=true` and a random `LAB_ACCESS_TOKEN` (24 characters minimum, 32+ recommended). Leave Supabase settings blank. Enter the lab access key in the page, then choose Live. Saved records are temporary without Supabase. Signed in-progress receipts allow staged requests to continue on a new server instance while the tab remains open. There is no cross-instance replay protection or global usage allowance without durable storage; never automatically retry an interrupted paid call.
 
 ## Start locally — no credentials needed
 
@@ -13,14 +17,14 @@ npm run dev
 
 Open the URL printed by the server. Start a **Mock** comprehensive profile, select it as a saved organization, then run **Meeting preparation**. Inspect stage receipts and coverage. Mock fixtures contain no real research, financials or cost measurements.
 
-Click **Write storage probe**, switch from Account A to Account B, and check the same organization/version IDs and note. Switch to Outsider: access must be denied. Local records live in `.lab-data/state.json`; restart the server to check persistence. This is a simulator, not proof of Supabase storage. Without Supabase, Vercel uses ephemeral `/tmp` files and cannot provide durable cross-instance storage; live calls are blocked.
+Click **Write storage probe**, switch from Account A to Account B, and check the same organization/version IDs and note. Switch to Outsider: access must be denied. Local records live in `.lab-data/state.json`; restart the server to check persistence. This is a simulator, not proof of Supabase storage. Without Supabase, Vercel uses ephemeral `/tmp` files and cannot provide durable cross-instance storage; paid calls require the API-only settings above.
 
 ## Connect Supabase
 
 1. Create a separate test project and three email/password Auth accounts: A, B and an outsider. No application account creation or invitations are implemented.
 2. Run both SQL migrations in filename order using the SQL editor. Existing v1 tables remain intact; v2 uses separate `lab2_*` tables.
 3. Edit `supabase/setup-test-space.sql`: replace the two sample user UUIDs with A and B's real Auth UUIDs, then run it. Give the outsider no membership. The workspace UUID must match `LAB_WORKSPACE_ID`.
-4. Copy `.env.example` to `.env.local`. Fill in `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, and `LAB_WORKSPACE_ID`. Keep `LIVE_API_ENABLED=false` initially. Restart the server after changing settings.
+4. Copy `.env.example` to `.env.local`. Fill in `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, and `LAB_WORKSPACE_ID`. Keep `LIVE_API_ENABLED=false` for a storage-only check. Restart the server after changing settings.
 5. Sign in as A, write a storage probe and note. Sign out, sign in as B (or use another browser/device), reload and compare the same IDs. Add a note as B and read it as A. Sign in as the outsider; access must fail.
 
 For a repeatable hosted smoke test, put three existing short-lived access tokens in the local `LAB_TEST_ACCESS_TOKEN_A`, `_B`, `_OUTSIDER` variables and run:
@@ -35,7 +39,7 @@ All data in this test workspace, including source context and notes, is shared w
 
 ## Run a paid representative benchmark
 
-Set the server environment variable **`OPENAI_API_KEY`** to an active project key with access to the selected models and web search. Set **`LIVE_API_ENABLED=true`**, restart/redeploy, then choose **Live**. These secrets belong on the server, never in `public/` or a client-prefixed variable. Supabase Auth membership is required; a key alone does not enable live mode.
+Set the server environment variable **`OPENAI_API_KEY`** to an active project key with access to the selected models and web search. Set **`LIVE_API_ENABLED=true`**, restart/redeploy, then choose **Live**. These secrets belong on the server, never in `public/` or a client-prefixed variable. With Supabase configured, Auth membership is required. Without Supabase, the separate lab access key unlocks API testing.
 
 | Workflow                     | Calls                   | Routing and scope                                                                                         |
 | ---------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------- |
@@ -74,7 +78,7 @@ Upload this folder to your own Git repository and import it into Vercel:
 
 ## Minimum storage architecture
 
-The lab deliberately uses one small JSON document per test workspace with a revision-checked SQL write. It is a test adapter, not a recommended production data model. RLS allows members to read the shared document; browser writes and mutation-RPC execution are denied. The verified server performs writes; the RPC independently checks editor membership and compares revisions. Durable stage claims prevent duplicate calls across server instances. A changed claim is never regenerated automatically.
+The lab deliberately uses one small JSON document per test workspace with a revision-checked SQL write. It is a test adapter, not a recommended production data model. RLS allows members to read the shared document; browser writes and mutation-RPC execution are denied. The verified server performs writes; the RPC independently checks editor membership and compares revisions. In Supabase mode, durable stage claims prevent duplicate calls across server instances. In standalone mode, claims and the usage allowance are only local to each server instance; signed receipts carry progress but are not a replay-prevention database. A changed claim is never regenerated automatically.
 
 Organizations have stable IDs, separate entity scopes, numbered append-only profile versions and shared append-only notes. Domain alone never merges records. This simple identity key uses normalized name + domain + scope; it is not full entity resolution. Jobs pin their source version. Cache reuse creates no profile version. Complete enrichment creates a version; failed jobs retain partial output and receipts without creating a completed profile. Refreshing a basic profile produces a basic latest version; choose Comprehensive when you need the full scope.
 

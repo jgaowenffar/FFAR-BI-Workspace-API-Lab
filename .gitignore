@@ -1,0 +1,8 @@
+node_modules/
+.env*
+!.env.example
+.vercel/
+.supabase/
+*.log
+test-results/
+.lab-data/
