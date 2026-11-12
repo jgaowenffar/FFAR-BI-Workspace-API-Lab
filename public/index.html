@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Research API Lab</title>
+    <link rel="stylesheet" href="style.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <header>
+      <div>
+        <span class="eyebrow">BACKEND BENCHMARK · V2</span>
+        <h1>Research API Lab</h1>
+      </div>
+      <span id="backend" class="badge">Connecting</span>
+    </header>
+    <main>
+      <section class="notice">
+        <p id="environment">Checking configuration…</p>
+        <p>
+          A generic public-research benchmark. It measures these workflows; it
+          does not reproduce an existing application's private prompts, UI or
+          exact production cost. Mock results are synthetic.
+        </p>
+      </section>
+      <section class="panel" aria-labelledby="account-heading">
+        <h2 id="account-heading">1. Test account</h2>
+        <div id="demo-auth" hidden>
+          <label
+            >Local actor<select id="actor">
+              <option value="demo-a">Account A · member</option>
+              <option value="demo-b">Account B · member</option>
+              <option value="demo-outsider">Outsider · denied</option>
+            </select></label
+          >
+          <p>
+            Switch to B after saving a profile or probe. Both members should see
+            the same IDs, versions and notes. This simulates access rules
+            locally.
+          </p>
+        </div>
+        <form id="auth-form" hidden class="row">
+          <label
+            >Email<input
+              id="email"
+              type="email"
+              autocomplete="username"
+              required /></label
+          ><label
+            >Password<input
+              id="password"
+              type="password"
+              autocomplete="current-password"
+              required /></label
+          ><button>Sign in</button
+          ><button id="signout" type="button">Sign out</button>
+        </form>
+        <p id="account-state" role="status"></p>
+      </section>
+      <div class="grid">
+        <section class="panel">
+          <h2>2. Research workflow</h2>
+          <form id="run-form">
+            <label
+              >Saved organization<select id="profile">
+                <option value="">New organization / supplied text</option>
+              </select></label
+            >
+            <div class="row">
+              <label
+                >Organization or topic<input
+                  id="organization"
+                  required
+                  maxlength="1000"
+                  placeholder="Organization name or research topic" /></label
+              ><label
+                >Official domain<input
+                  id="domain"
+                  maxlength="1000"
+                  placeholder="example.org"
+              /></label>
+            </div>
+            <div class="row">
+              <label
+                >Entity scope<input
+                  id="scope"
+                  maxlength="1000"
+                  placeholder="Global parent, US subsidiary, etc." /></label
+              ><label
+                >Organization type<select id="orgtype">
+                  <option value="">Determine from sources</option>
+                  <option>Company</option>
+                  <option>Foundation / nonprofit</option>
+                  <option>Government agency</option>
+                  <option>University / research institute</option>
+                </select></label
+              >
+            </div>
+            <div class="row">
+              <label>Workflow<select id="operation"></select></label
+              ><label>Research recipe<select id="recipe"></select></label
+              ><label
+                >Provider mode<select id="mode">
+                  <option value="mock">Mock · no API charge</option>
+                  <option value="live">Live · paid API calls</option>
+                </select></label
+              >
+            </div>
+            <label
+              >Meeting purpose / research question<input
+                id="goal"
+                maxlength="1000"
+                placeholder="What do you need to understand?" /></label
+            ><label
+              >Optional source text / internal context<textarea
+                id="context"
+                rows="3"
+                maxlength="32000"
+                placeholder="Use public or approved test information only. Shared with members of this test workspace."
+              ></textarea>
+            </label>
+            <div class="checks">
+              <label
+                ><input type="checkbox" id="fresh" />Add fresh news before
+                meeting preparation</label
+              ><label
+                ><input type="checkbox" id="reuse" />Reuse saved profile with
+                zero provider calls</label
+              >
+            </div>
+            <details open>
+              <summary>Planned API calls and limits</summary>
+              <div id="plan"></div>
+            </details>
+            <p class="muted">
+              Basic profile is an identity pass. Comprehensive covers business,
+              statements, people, projects/funding, news and consistency.
+              Meeting preparation uses Luna for evidence selection and Sol for
+              analysis; “Sol” uses Sol throughout.
+            </p>
+            <button id="start" class="primary">Start workflow</button
+            ><button id="pause" type="button" disabled>
+              Pause after current stage
+            </button>
+          </form>
+          <p id="message" role="status" aria-live="polite"></p>
+        </section>
+        <aside class="panel">
+          <h2>3. Shared storage check</h2>
+          <p>
+            No AI calls. Write a synthetic organization, version and note, then
+            reload or sign in as the other member to check the same records.
+          </p>
+          <button id="probe">Write storage probe</button
+          ><button id="reload">Reload shared records</button>
+          <p id="probe-result" role="status"></p>
+          <h3>Shared organization notes</h3>
+          <label>Organization<select id="note-org"></select></label
+          ><label
+            >Test note<textarea
+              id="note"
+              rows="3"
+              maxlength="4000"
+            ></textarea></label
+          ><button id="save-note">Save shared note</button>
+          <div id="notes" class="scroll"></div>
+          <h3>What this checks</h3>
+          <p>
+            Database records, profile versions, authenticated sharing and
+            persistence. It does not test file attachments, realtime
+            subscriptions or production-scale storage.
+          </p>
+        </aside>
+      </div>
+      <section class="panel">
+        <div class="row heading">
+          <h2>Workflow result and receipts</h2>
+          <button id="export" disabled>Export selected workflow JSON</button>
+        </div>
+        <div id="result"><p>Select or run a workflow.</p></div>
+      </section>
+      <section class="panel">
+        <h2>Saved profiles and versions</h2>
+        <div id="versions" class="scroll"></div>
+      </section>
+      <section class="panel">
+        <h2>Workflow history</h2>
+        <p>
+          Resume queued stages from the account that created the workflow.
+          Failed or interrupted stages never retry automatically. Keep the tab
+          open while running; this sandbox has no background worker.
+        </p>
+        <div id="history" class="scroll"></div>
+      </section>
+      <section class="panel">
+        <h2>Reading the cost result</h2>
+        <p id="pricing"></p>
+        <p>
+          Costs use reported input, cached input, output and web-search calls.
+          Reasoning tokens are already included in output. Unknown charges
+          remain unknown; a known subtotal is not a complete cost.
+          Database/hosting fees and regional or long-context uplifts are
+          excluded. A low bill does not prove useful research: inspect coverage,
+          facts, sources and financial periods alongside it.
+        </p>
+      </section>
+    </main>
+    <footer>Research API Lab · isolated testing environment</footer>
+  </body>
+</html>
